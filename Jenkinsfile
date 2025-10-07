@@ -66,8 +66,14 @@ pipeline {
 
         stage('Deploy Container') {
             steps {
-                sh 'docker run -d --name springboot-app -p 9090:8080 ahmed535/springboot-app:20'
+                script {
+                    // Arrêter et supprimer l'ancien conteneur s'il existe
+                    sh 'docker stop springboot-app || true'
+                    sh 'docker rm springboot-app || true'
 
+                    // Déployer le nouveau conteneur
+                    sh "docker run -d --name springboot-app -p 9090:8080 ahmed535/springboot-app:${env.BUILD_NUMBER}"
+                }
             }
         }
     }
