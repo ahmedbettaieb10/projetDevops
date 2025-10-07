@@ -66,11 +66,8 @@ pipeline {
 
         stage('Deploy Container') {
             steps {
-                sh """
-                docker stop springboot-app || true
-                docker rm springboot-app || true
-                docker run -d --name springboot-app -p 8080:8080 ${IMAGE_NAME}:${BUILD_NUMBER}
-                """
+                sh 'docker run -d --name springboot-app -p 9090:8080 ahmed535/springboot-app:20'
+
             }
         }
     }
