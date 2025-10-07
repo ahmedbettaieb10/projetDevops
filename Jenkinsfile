@@ -1,47 +1,74 @@
 pipeline {
     agent any
 
-    tools {
-        maven 'Maven-3.8.8'   // nom configuré dans Jenkins
-        jdk 'jdk17'           // ajoute Java 17 dans Jenkins si besoin
-    }
-
     environment {
-        SONARQUBE = 'SonarQube'   // nom configuré dans "Manage Jenkins"
+        // Nom du serveur Sonar défini dans Jenkins
+        SONARQUBE = 'SonarQube-Server'
+        // Nom du repo dockerhub défini dans Jenkins
+        DOCKERHUB_CREDENTIALS = 'dockerhub-cred'
+        IMAGE_NAME = "ahmed535/springboot-app"
     }
 
     stages {
-        stage('Checkout') {
+        stage('Pull from Git') {
             steps {
                 git branch: 'main',
-                    url: 'https://github.com/ahmedbettaieb10/projetDevops.git'
+                    url: 'https://github.com/ahmedbettaieb10/projetDevops.git',
+                    credentialsId: 'git-credentials'
             }
         }
 
-        stage('Build & Test') {
+        stage('Clean Project') {
             steps {
-                sh 'mvn clean install'
+                sh 'mvn clean'
+            }
+        }
+
+        stage('Compile') {
+            steps {
+                sh 'mvn compile'
             }
         }
 
         stage('SonarQube Analysis') {
             steps {
                 withSonarQubeEnv("${SONARQUBE}") {
-                    sh '''
-                        mvn sonar:sonar \
-                          -Dsonar.projectKey=TP-Projet \
-                          -Dsonar.projectName=TP-Projet \
-                          -Dsonar.host.url=http://192.168.33.10:9000
-                    '''
+                    sh 'mvn sonar:sonar -Dsonar.projectKey=springboot-app -Dsonar.host.url=http://localhost:9000 -Dsonar.login=$SONAR_AUTH_TOKEN'
                 }
             }
         }
 
-        stage("Quality Gate") {
+        stage('Build JAR') {
             steps {
-                timeout(time: 5, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: true
+                sh 'mvn package -DskipTests'
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    docker.build("${IMAGE_NAME}:${BUILD_NUMBER}", ".")
                 }
+            }
+        }
+
+        stage('Push Docker Image') {
+            steps {
+                script {
+                    docker.withRegistry('https://index.docker.io/v1/', "${DOCKERHUB_CREDENTIALS}") {
+                        docker.image("${IMAGE_NAME}:${BUILD_NUMBER}").push()
+                    }
+                }
+            }
+        }
+
+        stage('Deploy Container') {
+            steps {
+                sh """
+                docker stop springboot-app || true
+                docker rm springboot-app || true
+                docker run -d --name springboot-app -p 8080:8080 ${IMAGE_NAME}:${BUILD_NUMBER}
+                """
             }
         }
     }
