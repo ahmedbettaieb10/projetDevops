@@ -45,12 +45,14 @@ pipeline {
         }
 
         stage('Build Docker Image') {
-            steps {
-                script {
-                    docker.build("${IMAGE_NAME}:${BUILD_NUMBER}", ".")
+                    steps {
+                        script {
+                            sh """
+                                docker build -t ahmed535/springboot-app:${BUILD_NUMBER} .
+                            """
+                        }
+                    }
                 }
-            }
-        }
 
         stage('Push Docker Image') {
             steps {
