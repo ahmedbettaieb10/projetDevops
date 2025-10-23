@@ -2,11 +2,10 @@ pipeline {
     agent any
 
     environment {
-        // Nom du serveur Sonar défini dans Jenkins
         SONARQUBE = 'SonarQube-Server'
-        // Nom du repo dockerhub défini dans Jenkins
         DOCKERHUB_CREDENTIALS = 'dockerhub-cred'
         IMAGE_NAME = "ahmed535/springboot-app"
+        KUBE_CONFIG = "$HOME/.kube/config"
     }
 
     stages {
@@ -45,16 +44,12 @@ pipeline {
         }
 
         stage('Build Docker Image') {
-                    steps {
-                        script {
-                            sh """
-                                docker build -t ahmed535/springboot-app:${BUILD_NUMBER} .
-                            """
-                        }
-                    }
-                }
+            steps {
+                sh "docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} ."
+            }
+        }
 
-        stage('Push Docker Image') {
+        stage('Push Docker Image to DockerHub') {
             steps {
                 script {
                     docker.withRegistry('https://index.docker.io/v1/', "${DOCKERHUB_CREDENTIALS}") {
@@ -64,19 +59,34 @@ pipeline {
             }
         }
 
-        stage('Deploy Container') {
+        // --- Nouvelle partie CD ---
+        stage('Deploy MySQL and Backend on Minikube') {
             steps {
                 script {
-                    // Stoppe le conteneur s'il existe
-                    sh 'docker ps -q --filter "name=springboot-app" | grep -q . && docker stop springboot-app || true'
+                    // Démarrer Minikube s’il n’est pas actif
+                    sh 'minikube status || minikube start'
 
-                    // Supprime le conteneur s'il existe
-                    sh 'docker ps -a -q --filter "name=springboot-app" | grep -q . && docker rm springboot-app || true'
+                    // Appliquer les fichiers YAML
+                    sh '''
+                        kubectl apply -f mysql-secret.yaml
+                        kubectl apply -f mysql_deployment.yaml
+                        kubectl apply -f restaurant-app-deployment.yaml
+                    '''
 
-                    // Déploie le nouveau conteneur avec le build en cours
-                    sh "docker run -d --name springboot-app -p 9090:8080 ahmed535/springboot-app:${env.BUILD_NUMBER}"
+                    // Vérifier les pods
+                    sh 'kubectl get pods'
                 }
             }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ Déploiement réussi sur Minikube !"
+            sh 'kubectl get svc'
+        }
+        failure {
+            echo "❌ Le pipeline a échoué."
         }
     }
 }
